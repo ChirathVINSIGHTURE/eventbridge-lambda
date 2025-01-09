@@ -1,44 +1,30 @@
 import json
 import logging
+import time
+from datetime import datetime, timezone
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-
 def lambda_handler(event, context):
-    """Sample pure Lambda function
+    try:
+        # Extract the timestamp from the event
+        event_time_str = event.get('time', '1970-01-01T00:00:00Z')  
+        event_time = datetime.fromisoformat(event_time_str.replace('Z', '+00:00'))  
+        event_time_ms = event_time.timestamp() * 1000
 
-    Parameters
-    ----------
-    event: dict, required
-        API Gateway Lambda Proxy Input Format
+        current_time_ms = time.time() * 1000  
+        latency = current_time_ms - event_time_ms
 
-        Event doc: https://docs.aws.amazon.com/apigateway/latest/developerguide/set-up-lambda-proxy-integrations.html#api-gateway-simple-proxy-for-lambda-input-format
-
-    context: object, required
-        Lambda Context runtime methods and attributes
-
-        Context doc: https://docs.aws.amazon.com/lambda/latest/dg/python-context-object.html
-
-    Returns
-    ------
-    API Gateway Lambda Proxy Output Format: dict
-
-        Return doc: https://docs.aws.amazon.com/apigateway/latest/developerguide/set-up-lambda-proxy-integrations.html
-    """
-
-    # try:
-    #     ip = requests.get("http://checkip.amazonaws.com/")
-    # except requests.RequestException as e:
-    #     # Send some context about this error to Lambda Logs
-    #     print(e)
-
-    #     raise e
-
-    logger.info("Hello, EventBridge!")
-    logger.info(f"Event received: {event}")
-    
-    return {
-        "statusCode": 200,
-        "body": "Hello, EventBridge!"
-    }
+        logger.info(f"Event Latency: {latency} ms")
+        logger.info(f"Event received: {json.dumps(event)}")
+        
+        # Simulate failure for certain statuses
+        status = event.get('detail', {}).get('status', '')
+        if status != "success":
+            raise ValueError(f"Unexpected status: {status}")
+        
+        return {"statusCode": 200, "body": "Messages processed successfully"}
+    except Exception as e:
+        logger.error(f"Error processing event: {e}")
+        raise
