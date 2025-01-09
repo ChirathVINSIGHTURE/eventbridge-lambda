@@ -16,7 +16,10 @@ def lambda_handler(event, context):
         current_time_ms = time.time() * 1000  
         latency = current_time_ms - event_time_ms
 
+        # Log latency
         logger.info(f"Event Latency: {latency} ms")
+        
+        # Log full event
         logger.info(f"Event received: {json.dumps(event)}")
         
         # Simulate failure for certain statuses
