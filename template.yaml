@@ -1,62 +1,66 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: >
-  eventbridge-lambda
-
-  Sample SAM Template for eventbridge-lambda
-
-# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
-Globals:
-  Function:
-    Timeout: 3
+Description: EventBridge -> Lambda with DLQ
 
 Resources:
-  HelloWorldFunction:
+  MyLambdaFunction:
     Type: AWS::Serverless::Function
     Properties:
       Handler: app.lambda_handler
       Runtime: python3.13
       CodeUri: hello_world/
+      MemorySize: 128
+      Timeout: 3
       Policies:
-        - CloudWatchLogsFullAccess
-      Events:
-        EventBridgeRule:
-          Type: CloudWatchEvent
-          Properties:
-            Pattern:
-              source:
-                - "custom.myapp"
-              detail-type:
-                - "MyApp Event"
-              detail:
-                status:
-                  - "trigger"
+        - AWSLambdaBasicExecutionRole
 
-  EventBridgeRule:
+  EventBridgeDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: EventBridgeDLQ
+
+  EventBridgeDLQPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref EventBridgeDLQ
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: "sqs:SendMessage"
+            Resource: !GetAtt EventBridgeDLQ.Arn
+
+  MyEventBridgeRule:
     Type: AWS::Events::Rule
     Properties:
       Name: MyEventBridgeRule
       EventPattern:
         source:
-          - "custom.myapp"
-        detail-type:
-          - "MyApp Event"
-        detail:
-          status:
-            - "trigger"
+          - "my.custom.source"
       Targets:
-        - Arn: !GetAtt HelloWorldFunction.Arn
-          Id: "HelloWorldFunctionTarget"
+        - Arn: !GetAtt MyLambdaFunction.Arn
+          Id: MyLambdaTarget
+          DeadLetterConfig:
+            Arn: !GetAtt EventBridgeDLQ.Arn
 
-  LambdaInvokePermission:
+  EventBridgeInvokeLambdaPermission:
     Type: AWS::Lambda::Permission
     Properties:
+      FunctionName: !GetAtt MyLambdaFunction.Arn
       Action: lambda:InvokeFunction
-      FunctionName: !GetAtt HelloWorldFunction.Arn
       Principal: events.amazonaws.com
-      SourceArn: !GetAtt EventBridgeRule.Arn
-  
+      SourceArn: !GetAtt MyEventBridgeRule.Arn
+
 Outputs:
-  HelloWorldFunction:
-    Description: Lambda Function ARN
-    Value: !GetAtt HelloWorldFunction.Arn
+  LambdaFunction:
+    Description: "Lambda Function ARN"
+    Value: !GetAtt MyLambdaFunction.Arn
+  EventBridgeRule:
+    Description: "EventBridge Rule ARN"
+    Value: !Ref MyEventBridgeRule
+  DeadLetterQueue:
+    Description: "Dead Letter Queue ARN"
+    Value: !GetAtt EventBridgeDLQ.Arn
